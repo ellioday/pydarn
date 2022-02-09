@@ -13,6 +13,9 @@ module, classes, and functions.
 
 import os
 
+# version file
+from .version import __version__
+
 # Import io for pyDARN
 from .io.superdarn_io import SuperDARNRead
 
@@ -57,3 +60,4 @@ from .plotting.acf import ACF
 from .plotting.power import Power
 
 cartopy_print_warning()
+citing_warning()

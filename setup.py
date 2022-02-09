@@ -58,11 +58,12 @@ warnings.warn("If you are going to use Fan, Grid, and/or Convection Map "
                  "If you do not need to use cartopy for your plotting, ignore "
                  "this message.")
 
+exec(open('pydarn/version.py').read())
 # Setup information
 setup(
     cmdclass={'install': initialize_submodules, 'develop': update_submodules},
     name="pydarn",
-    version="3.0",
+    version=__version__,
     long_description=long_description,
     long_description_content_type='text/markdown',
     description="Data visualization library for SuperDARN data",
