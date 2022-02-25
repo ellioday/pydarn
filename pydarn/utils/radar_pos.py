@@ -43,7 +43,8 @@ import os
 
 import aacgmv2
 
-from pydarn import SuperDARNRadars, gate2slant, Coords
+from pydarn import (SuperDARNRadars, gate2slant, Coords,
+                    gate2ground_scatter)
 from pydarn.utils.constants import EARTH_EQUATORIAL_RADIUS, Re, C
 
 from pydarn.utils.virtual_heights_types import VH_types
@@ -88,8 +89,9 @@ def radar_fov(stid: int, rsep: int = 45, frang: int = 180,
     beam_corners_lons = np.zeros((ranges[1], max_beams+1))
     for beam in range(0, max_beams+1):
         for gate in range(ranges[0], ranges[1]):
-            lat, lon = geographic_cell_positions(stid, beam, gate, rsep,
-                                                 frang, height=300)
+            lat, lon = geographic_cell_positions(stid=stid, beam=beam,
+                                                 range_gate=gate, height=300,
+                                                 **kwargs)
 
             if coords == Coords.AACGM_MLT:
                 if date is None:
@@ -116,10 +118,9 @@ def radar_fov(stid: int, rsep: int = 45, frang: int = 180,
 
 # RPosGeo line 335
 def geographic_cell_positions(stid: int, beam: int, range_gate: int,
-                              rsep: int = 45, frang: int = 180,
                               height: float = None, elv_angle: float = 0.0,
-                              center: bool = True, chisham: bool = False,
-                              virtual_height_type: object = VH_types.STANDARD_VIRTUAL_HEIGHT):
+                              center: bool = True,
+                              coords: Coords = Coords.GEOGRAPHIC, **kwargs):
     """
     determines the geographic cell position for a given range gate and beam
 
@@ -150,10 +151,9 @@ def geographic_cell_positions(stid: int, beam: int, range_gate: int,
             obtain geographic location of the centre of the range gates
             False obtains the front edge of the range gates.
             default: True
-        virtual_height_type: object
-            use for choosing type of virtual height
-            default: VH_types.STANDARD_VIRTUAL_HEIGHT
-
+        coords: Coords
+            set the y-axis to a desired coordinate system
+            Default: Coords.GEOGRAPHIC
     returns
     -------
         lat: float
@@ -189,17 +189,28 @@ def geographic_cell_positions(stid: int, beam: int, range_gate: int,
 
     # psi [rad] in the angle from the boresight
     psi = beam_sep * (beam - offset) + beam_edge
-    # Calculate the slant range [km]
-    slant_range = gate2slant(frang, rsep, rxrise, gate=range_gate)
+    ## Initialize lon and lat to allow use outside of if statement
+    #lon = np.empty((2,2))
+    #lat = np.empty((2,2))
 
-    # If no height is specified then use elevation angle (default 0)
-    # to calculate the transmutation height
+    slant_range = gate2slant(rxrise=rxrise, gate=range_gate, **kwargs)
+    #calculates lon and lat for slant range
+    if coords == Coords.GROUND_SCATTER_MAPPED_RANGE:
+        conversion_range = gate2ground_scatter(conversion_range, **kwargs)
+    else:
+        conversion_range = slant_range
+
     if height is None:
-        height = -Re + np.sqrt(Re**2 + 2 * slant_range * Re *
-                               np.sin(np.radians(elv_angle)) + slant_range**2)
+        height = -Re + np.sqrt(Re**2 + 2 * conversion_range * Re *
+                               np.sin(np.radians(elv_angle)) + conversion_range**2)
 
-    lat, lon = geocentric_coordinates(radar_lat, radar_lon, slant_range,
-                                      height, psi, boresight, virtual_height_type = virtual_height_type)
+    lat, lon = geocentric_coordinates(radar_lat=radar_lat, radar_lon=radar_lon,
+                                      conversion_range=conversion_range,
+                                      cell_height=height, psi=psi,
+                                      boresight=boresight, **kwargs)
+
+
+
 
     # convert back degrees as preferred units to use?
     return np.degrees(lat), np.degrees(lon)
@@ -207,9 +218,11 @@ def geographic_cell_positions(stid: int, beam: int, range_gate: int,
 
 # fldpnth line 90
 def geocentric_coordinates(radar_lat: float, radar_lon: float,
-                           slant_range: float, cell_height: float,
+                           conversion_range: float, cell_height: float,
                            psi: float, boresight: float,
-                           virtual_height_type: object = VH_types.STANDARD_VIRTUAL_HEIGHT):
+                           virtual_height_type: object =
+                           VH_types.STANDARD_VIRTUAL_HEIGHT,
+                           **kwargs):
     """
     Calculates the geocentric coordinates of gate cell  point,
     using either the standard or Chisham virtual height model.
@@ -220,7 +233,7 @@ def geocentric_coordinates(radar_lat: float, radar_lon: float,
             radars site latitude [rad]
         radar_lon : float
             radars site longitude [lon]
-        slant_range: float
+        conversion_range: float
             slant range distance [km]
         cell_height : float
             virtual height of the gate cell [km]
@@ -247,10 +260,10 @@ def geocentric_coordinates(radar_lat: float, radar_lon: float,
     G. Chisham 2008 (https://doi.org/10.5194/angeo-26-823-2008)
     """
     if virtual_height_type == VH_types.CHISHAM:
-        x_height = chisham(slant_range)
+        x_height = chisham(conversion_range)
 
     if virtual_height_type == VH_types.STANDARD_VIRTUAL_HEIGHT:
-        x_height = standard_virtual_height(slant_range, cell_height)
+        x_height = standard_virtual_height(conversion_range, cell_height)
 
     # calculate the radius over the earth underneath
     # the radar and range gate cell
@@ -265,14 +278,14 @@ def geocentric_coordinates(radar_lat: float, radar_lon: float,
         # distance between the gate cell to the earth's centre [km]
         cell_rho = r_cell + x_height
         # elevation angle relative to local horizon [rad]
-        rel_elv = np.arcsin(((cell_rho**2) - (r_radar**2) - slant_range**2) /
-                            (2.0 * r_radar * slant_range))
+        rel_elv = np.arcsin(((cell_rho**2) - (r_radar**2) - conversion_range**2) /
+                            (2.0 * r_radar * conversion_range))
         # estimate elevation for multi-hop propagation
-        if chisham and slant_range > 2137.5:
-            gamma = np.arccos((r_radar**2 + cell_rho**2 - slant_range**2) /
+        if chisham and conversion_range > 2137.5:
+            gamma = np.arccos((r_radar**2 + cell_rho**2 - conversion_range**2) /
                               (2.0 * r_radar * cell_rho))
             beta = np.arcsin(r_radar * np.sin(gamma/3.0) /
-                             (slant_range/3.0))
+                             (conversion_range/3.0))
             # Elevation angle used for estimating off-array normal
             # azimuth [rad]
             xelv = (np.pi/2) - beta - (gamma/3.0)
@@ -301,7 +314,7 @@ def geocentric_coordinates(radar_lat: float, radar_lon: float,
         cell_rho, cell_lat, cell_lon = \
             cell_geocentric_coordinates(rlat, rlon, r_radar,
                                         flatten_azimuth, rel_elv,
-                                        slant_range)
+                                        conversion_range)
 
         # recalculate the radius under the gate cell and centre of earth
         r_cell = geocentric2geodetic(cell_lat, cell_lon)
@@ -314,7 +327,8 @@ def geocentric_coordinates(radar_lat: float, radar_lon: float,
 
 # fldpnt
 def cell_geocentric_coordinates(lat: float, lon: float, rho: float,
-                                azimuth: float, elv: float, r: float):
+                                azimuth: float, elv: float, r: float,
+                                **kwargs):
     """
     Calculates the geocentric coordinates of a gate cell point given the
     angular geocentric coordinates of the point of origin,

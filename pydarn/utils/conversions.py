@@ -86,8 +86,8 @@ def dmap2dict(dmap_records: List[dict]) -> List[dict]:
     return dmap_list
 
 
-def gate2GroundScatter(slant_ranges: List[float],
-                       reflection_height: float = 250):
+def gate2ground_scatter(slant_ranges: List[float],
+                       reflection_height: float = 250, **kwargs):
     """
     Calculate the ground scatter mapped range (km) for each slanted range
     for SuperDARN data. This function is based on the Ground Scatter equation
@@ -112,8 +112,8 @@ def gate2GroundScatter(slant_ranges: List[float],
     return ground_scatter_mapped_ranges
 
 
-def gate2slant(frang:int, rsep:int, rxrise:int, gate: int = 0,
-               nrang: int = None, center: bool = True):
+def gate2slant(rxrise:int, gate: int = 0, frang: int = 180, rsep: int = 45,
+               nrang: int = None, center: bool = True, **kwargs):
     """
     Calculate the slant range (km) for each range gate for SuperDARN data
 

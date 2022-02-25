@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 from matplotlib import dates, colors, cm, ticker
 from typing import List
 
-from pydarn import (gate2GroundScatter, gate2slant, check_data_type,
+from pydarn import (gate2ground_scatter, gate2slant, check_data_type,
                     time2datetime, rtp_exceptions, plot_exceptions,
                     SuperDARNCpids, SuperDARNRadars,
                     standard_warning_format, PyDARNColormaps,
@@ -364,7 +364,7 @@ class RTP():
             y = gate2slant(cls.dmap_data[0]['frang'], cls.dmap_data[0]['rsep'],
                            rxrise, nrang=y_max)
             if coords is Coords.GROUND_SCATTER_MAPPED_RANGE:
-                y = gate2GroundScatter(y, **kwargs)
+                y = gate2ground_scatter(y, **kwargs)
                 y0inx = np.min(np.where(np.isfinite(y))[0])
                 y = y[y0inx:]
                 z = z[:, y0inx:]
